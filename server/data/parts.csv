@@ -1,0 +1,8 @@
+part_id,name,category,supplier_id,unit_cost
+PRT001,Circuit Board A,Electronics,SUP001,45.50
+PRT002,Steel Frame,Structural,SUP002,120.00
+PRT003,Memory Chip 8GB,Electronics,SUP003,22.75
+PRT004,Power Supply Unit,Electronics,SUP004,65.00
+PRT005,Aluminum Housing,Structural,SUP005,85.25
+PRT006,Display Panel,Electronics,SUP003,150.00
+PRT007,Cooling Fan,Mechanical,SUP001,12.50

@@ -1,0 +1,4 @@
+factory_id,name,location,capacity_units,operational_since
+FAC001,Main Assembly Plant,Austin,50000,2010
+FAC002,Electronics Hub,San Jose,30000,2015
+FAC003,Distribution Center,Chicago,75000,2008

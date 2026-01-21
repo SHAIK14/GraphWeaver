@@ -1,0 +1,6 @@
+# Claude Code settings and documentation
+.claude/
+
+# OS files
+.DS_Store
+Thumbs.db
