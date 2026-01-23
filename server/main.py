@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import user_intent, file_suggestion
+from app.api.routes import user_intent, file_suggestion, schema_proposal, unstructured_schema, graph_construction
 from app.core.config import get_settings
 
 
@@ -34,6 +34,9 @@ app.add_middleware(
 
 app.include_router(user_intent.router)
 app.include_router(file_suggestion.router)
+app.include_router(schema_proposal.router)
+app.include_router(unstructured_schema.router)
+app.include_router(graph_construction.router)
 
 
 @app.get("/")
@@ -66,7 +69,10 @@ async def health_check():
         "api": "operational",
         "agents": {
             "user_intent": "operational",
-            "file_suggestion": "operational"
+            "file_suggestion": "operational",
+            "schema_proposal": "operational",
+            "unstructured_schema": "operational",
+            "graph_construction": "operational"
         }
     }
 
@@ -91,6 +97,24 @@ async def api_info():
                 "name": "File Suggestion Agent",
                 "description": "Suggests relevant files for knowledge graph import",
                 "endpoint": "/api/file-suggestion/chat",
+                "status": "operational"
+            },
+            "schema_proposal": {
+                "name": "Schema Proposal Agent",
+                "description": "Proposes knowledge graph schema using critic pattern",
+                "endpoint": "/api/schema-proposal/chat",
+                "status": "operational"
+            },
+            "unstructured_schema": {
+                "name": "Unstructured Schema Agent",
+                "description": "NER and Fact extraction for unstructured text",
+                "endpoint": "/api/unstructured-schema/chat",
+                "status": "operational"
+            },
+            "graph_construction": {
+                "name": "Graph Construction Service",
+                "description": "Builds domain graph from construction plan (no LLM - rule-based)",
+                "endpoint": "/api/graph-construction/construct",
                 "status": "operational"
             }
         },
