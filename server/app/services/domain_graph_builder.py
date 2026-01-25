@@ -21,9 +21,7 @@ from typing import Any, Dict, List
 from app.services.neo4j_client import get_neo4j_client, tool_success, tool_error
 
 
-# =============================================================================
-# HELPER FUNCTIONS
-# =============================================================================
+
 
 def create_uniqueness_constraint(
     label: str,
@@ -258,7 +256,7 @@ def construct_domain_graph(construction_plan: Dict[str, Any]) -> Dict[str, Any]:
         "errors": []
     }
 
-    # Phase 1: Import all nodes first
+   
     node_constructions = [
         (name, rule) for name, rule in construction_plan.items()
         if rule.get("construction_type") == "node"
@@ -309,9 +307,6 @@ def construct_domain_graph(construction_plan: Dict[str, Any]) -> Dict[str, Any]:
     })
 
 
-# =============================================================================
-# INSPECTION FUNCTIONS
-# =============================================================================
 
 def get_graph_stats() -> Dict[str, Any]:
     """
@@ -366,9 +361,7 @@ def clear_graph() -> Dict[str, Any]:
     return tool_success("clear_result", "Graph cleared successfully")
 
 
-# =============================================================================
-# DIRECT DATA IMPORT (No CSV files needed - for testing)
-# =============================================================================
+
 
 def insert_sample_data() -> Dict[str, Any]:
     """
@@ -379,7 +372,7 @@ def insert_sample_data() -> Dict[str, Any]:
     """
     client = get_neo4j_client()
 
-    # Sample data matching course structure
+
     queries = [
         # Create Suppliers
         """

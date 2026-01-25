@@ -22,6 +22,10 @@ from app.services.domain_graph_builder import (
     clear_graph,
     insert_sample_data,
 )
+from app.services.lexical_graph_builder import build_lexical_graph
+
+from app.services.subject_graph_builder import build_subject_graph, resolve_entities
+from app.services.graph_query_service import create_vector_index, query_graph
 
 
 router = APIRouter(prefix="/api/graph-construction", tags=["graph-construction"])
@@ -74,11 +78,21 @@ class StatsResponse(BaseModel):
     status: str
     nodes: List[Dict[str, Any]]
     relationships: List[Dict[str, Any]]
+    
+class LexicalGraphRequest(BaseModel):
+    """Request body for lexical graph construction."""
+    file_path: str
+
+class SubjectGraphRequest(BaseModel):
+    """Request body for subject graph construction."""
+    source_file: Optional[str] = None  # Optional filter by source file
+
+class QueryRequest(BaseModel):
+    """Request body for GraphRAG query."""
+    question: str
+    top_k: int = 3  # Number of chunks to retrieve
 
 
-# =============================================================================
-# ENDPOINTS
-# =============================================================================
 
 @router.post("/construct", response_model=ConstructResponse)
 async def construct(request: ConstructRequest):
@@ -242,3 +256,109 @@ async def load_sample_data():
         )
 
     return result.get("insert_result", result)
+
+
+
+
+@router.post("/lexical")
+async def build_lexical(request: LexicalGraphRequest):
+    """
+    Build lexical graph from a markdown file.
+
+    This endpoint:
+    1. Reads the file
+    2. Chunks the text (500 chars, 100 overlap)
+    3. Creates embeddings via OpenAI
+    4. Stores chunks in Neo4j with NEXT_CHUNK relationships
+
+    Args:
+        file_path: Path to the markdown file to process
+
+    Returns:
+        Summary of chunks created
+
+    Example:
+        POST /api/graph-construction/lexical
+        {"file_path": "/data/reviews/product_review.md"}
+    """
+    result = await build_lexical_graph(request.file_path)  # await the async function
+
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("error_message", "Failed to build lexical graph")
+        )
+
+    return result
+
+@router.post("/subject")
+async def build_subject(request: SubjectGraphRequest):
+    """
+    Build subject graph by extracting entities from chunks.
+    
+    Uses LLM to extract named entities (companies, products, parts, etc.)
+    and stores them as Entity nodes linked to Chunks via HAS_ENTITY.
+    """
+    result = build_subject_graph(request.source_file)
+    
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("error_message", "Failed to build subject graph")
+        )
+    
+    return result
+
+
+@router.post("/resolve-entities")
+async def resolve():
+    """
+    Perform entity resolution: match extracted entities to domain graph nodes.
+    
+    Uses Jaro-Winkler fuzzy matching to connect Subject Graph entities
+    to Domain Graph nodes via CORRESPONDS_TO relationships.
+    """
+    result = resolve_entities()
+    
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("error_message", "Failed to resolve entities")
+        )
+    
+    return result
+
+@router.post("/create-vector-index")
+async def create_index():
+    """
+    Create vector index on Chunk embeddings for semantic search.
+    
+    Must be called once before querying.
+    """
+    result = create_vector_index()
+    
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("error_message", "Failed to create vector index")
+        )
+    
+    return result
+
+
+@router.post("/query")
+async def query(request: QueryRequest):
+    """
+    Query the GraphRAG system with a natural language question.
+    
+    Combines vector search + graph traversal + LLM generation.
+    """
+    result = query_graph(request.question, request.top_k)
+    
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("error_message", "Query failed")
+        )
+    
+    return result

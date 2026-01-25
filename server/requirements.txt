@@ -8,4 +8,5 @@ langchain-openai
 langgraph
 openai
 neo4j
+neo4j-graphrag
 python-dotenv
