@@ -148,13 +148,14 @@ def check_feedback_and_route(state: SchemaProposalState) -> str:
         logger.debug("[FEEDBACK CHECK] Max iterations reached, exiting")
         return "end"
 
-    # Check if feedback indicates valid schema
-    if "valid" in feedback.lower() and "retry" not in feedback.lower():
-        logger.debug("[FEEDBACK CHECK] Schema is valid, exiting loop")
-        return "end"
-    else:
-        logger.debug("[FEEDBACK CHECK] Schema needs refinement, looping back")
+    # Only loop back if critic explicitly says "retry" — otherwise treat as valid.
+    # This prevents wasted iterations when critic doesn't follow the exact one-word protocol.
+    if "retry" in feedback.lower():
+        logger.debug("[FEEDBACK CHECK] Critic requested retry, looping back")
         return "proposal"
+    else:
+        logger.debug("[FEEDBACK CHECK] No retry requested, exiting loop")
+        return "end"
 
 
 

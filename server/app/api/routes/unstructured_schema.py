@@ -13,17 +13,18 @@ The workflow has TWO stages:
 2. Fact Stage: Propose relationship triples → user approves
 """
 
+import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from langchain_core.messages import HumanMessage
 
 from app.agents.graphs.unstructured_schema_graph import ner_schema_graph, fact_schema_graph
+from app.core.session_manager import get_session, save_session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/unstructured-schema", tags=["unstructured-schema"])
-
-# In-memory session storage (use Redis/DB in production)
-sessions: dict[str, dict] = {}
 
 
 # =============================================================================
@@ -34,10 +35,10 @@ class ChatRequest(BaseModel):
     """Request body for chat endpoint."""
     session_id: str
     message: str
-    # Optional: Pass context from previous lessons
-    approved_user_goal: Optional[str] = None
-    approved_files: Optional[list[str]] = None
-    approved_construction_plan: Optional[dict] = None
+    # No longer needed - will load from Redis
+    # approved_user_goal: Optional[str] = None
+    # approved_files: Optional[list[str]] = None
+    # approved_construction_plan: Optional[dict] = None
 
 
 class ApproveEntitiesRequest(BaseModel):
@@ -59,39 +60,41 @@ class ChatResponse(BaseModel):
     approved_entities: Optional[list[dict]] = None
     proposed_facts: Optional[list[dict]] = None
     approved_facts: Optional[list[dict]] = None
+    current_phase: str = "unstructured_schema"
 
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
-def get_or_create_session(
-    session_id: str,
-    approved_user_goal: str = "",
-    approved_files: list[str] = None,
-    approved_construction_plan: dict = None,
-) -> dict:
+def get_or_create_session_state(session_id: str) -> dict:
     """
-    Get existing session or create new one.
+    Get existing session from Redis or create new one.
 
     Initial state includes:
     - stage: "ner" (start with entity recognition)
     - messages: empty (conversation history)
-    - Context from previous lessons if provided
+    - Context from previous agents loaded from Redis
     """
-    if session_id not in sessions:
-        sessions[session_id] = {
+    # Load from Redis
+    session_state = get_session(session_id)
+
+    if not session_state:
+        session_state = {
             "messages": [],
             "stage": "ner",
-            "approved_user_goal": approved_user_goal or "",
-            "approved_files": approved_files or [],
-            "approved_construction_plan": approved_construction_plan or {},
+            "approved_user_goal": "",
+            "approved_files": [],
+            "approved_construction_plan": {},
             "proposed_entities": [],
             "approved_entities": [],
             "proposed_facts": [],
             "approved_facts": [],
+            "current_phase": "unstructured_schema"
         }
-    return sessions[session_id]
+        save_session(session_id, session_state)
+
+    return session_state
 
 
 def extract_response_text(state: dict) -> str:
@@ -122,13 +125,11 @@ async def chat(request: ChatRequest):
     2. Optionally call tools
     3. Return a response (possibly with proposals)
     """
-    # Get or create session with optional context
-    state = get_or_create_session(
-        request.session_id,
-        approved_user_goal=request.approved_user_goal,
-        approved_files=request.approved_files,
-        approved_construction_plan=request.approved_construction_plan,
-    )
+    # Load session from Redis (includes context from previous agents!)
+    state = get_or_create_session_state(request.session_id)
+
+    logger.info(f"[unstructured_schema] Session {request.session_id} - Stage: {state['stage']}")
+    logger.info(f"[unstructured_schema] Session {request.session_id} - Files: {state.get('approved_files')}")
 
     # Add user message
     state["messages"].append(HumanMessage(content=request.message))
@@ -143,8 +144,16 @@ async def chat(request: ChatRequest):
     else:
         raise HTTPException(status_code=400, detail=f"Unknown stage: {state['stage']}")
 
-    # Update session with result
-    sessions[request.session_id] = result
+    # Save updated session to Redis
+    save_session(request.session_id, result)
+
+    logger.info(f"[unstructured_schema] Session {request.session_id} - Proposed entities: {len(result.get('proposed_entities', []))}")
+    logger.info(f"[unstructured_schema] Session {request.session_id} - Proposed facts: {len(result.get('proposed_facts', []))}")
+
+    # Determine next phase
+    current_phase = "unstructured_schema"
+    if result.get("approved_facts"):
+        current_phase = "graph_construction"
 
     return ChatResponse(
         session_id=request.session_id,
@@ -154,6 +163,7 @@ async def chat(request: ChatRequest):
         approved_entities=result.get("approved_entities"),
         proposed_facts=result.get("proposed_facts"),
         approved_facts=result.get("approved_facts"),
+        current_phase=current_phase
     )
 
 
@@ -167,10 +177,10 @@ async def approve_entities(request: ApproveEntitiesRequest):
     2. Changes stage from "ner" to "fact"
     3. Agent can now propose facts using approved entities
     """
-    if request.session_id not in sessions:
+    # Load from Redis
+    state = get_session(request.session_id)
+    if not state:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    state = sessions[request.session_id]
 
     # Check we have entities to approve
     if not state.get("proposed_entities"):
@@ -187,6 +197,11 @@ async def approve_entities(request: ApproveEntitiesRequest):
     state["messages"].append(
         HumanMessage(content="I approve the proposed entities. Please proceed with fact extraction.")
     )
+
+    # Save back to Redis
+    save_session(request.session_id, state)
+
+    logger.info(f"[unstructured_schema] Session {request.session_id} - Approved {len(state['approved_entities'])} entities, moving to fact stage")
 
     return ChatResponse(
         session_id=request.session_id,
@@ -208,10 +223,10 @@ async def approve_facts(request: ApproveFactsRequest):
     1. Copies proposed_facts to approved_facts
     2. Marks workflow as complete
     """
-    if request.session_id not in sessions:
+    # Load from Redis
+    state = get_session(request.session_id)
+    if not state:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    state = sessions[request.session_id]
 
     # Check we have facts to approve
     if not state.get("proposed_facts"):
@@ -224,6 +239,11 @@ async def approve_facts(request: ApproveFactsRequest):
     state["approved_facts"] = state["proposed_facts"].copy()
     state["stage"] = "complete"
 
+    # Save back to Redis
+    save_session(request.session_id, state)
+
+    logger.info(f"[unstructured_schema] Session {request.session_id} - Approved {len(state['approved_facts'])} facts, workflow complete")
+
     return ChatResponse(
         session_id=request.session_id,
         stage=state["stage"],
@@ -232,11 +252,12 @@ async def approve_facts(request: ApproveFactsRequest):
         approved_entities=state.get("approved_entities"),
         proposed_facts=state.get("proposed_facts"),
         approved_facts=state.get("approved_facts"),
+        current_phase="graph_construction"
     )
 
 
 @router.get("/session/{session_id}")
-async def get_session(session_id: str):
+async def get_session_endpoint(session_id: str):
     """
     Get the current state of a session.
 
@@ -245,10 +266,11 @@ async def get_session(session_id: str):
     - Proposed and approved entities/facts
     - Conversation history
     """
-    if session_id not in sessions:
+    # Load from Redis
+    state = get_session(session_id)
+    if not state:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    state = sessions[session_id]
     return {
         "session_id": session_id,
         "stage": state.get("stage"),
@@ -263,13 +285,21 @@ async def get_session(session_id: str):
 
 
 @router.delete("/session/{session_id}")
-async def delete_session(session_id: str):
+async def delete_session_endpoint(session_id: str):
     """
     Clear a session and all its state.
 
     Use this to start fresh.
     """
-    if session_id in sessions:
-        del sessions[session_id]
-        return {"message": f"Session {session_id} deleted"}
-    raise HTTPException(status_code=404, detail="Session not found")
+    from app.core.session_manager import delete_session
+
+    # Load from Redis
+    state = get_session(session_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Delete from Redis
+    delete_session(session_id)
+    logger.info(f"[unstructured_schema] Session {session_id} deleted")
+
+    return {"message": f"Session {session_id} deleted"}

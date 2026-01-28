@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fcfaf7; /* Exact Cohere cream-white */
+  --foreground: #212121; /* Volcanic black text */
+  --sidebar-bg: #fafafa; /* Off-white sidebar */
+  --content-bg: #ffffff; /* pure white content cards */
+  --accent-coral: #ff7759; /* Signature active dot */
+  --accent-green: #39594d; /* Primary button green */
+  --border-light: #e0e0e0; /* Subtle border color */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar-bg);
+  --color-content: var(--content-bg);
+  --color-accent: var(--accent-coral);
+  --color-primary: var(--accent-green);
+  --color-border-light: var(--border-light);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, monospace;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--background);
+  overflow: hidden; /* Prevent outer scroll */
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Global GraphWeaver-style utilities */
+.gw-section-header {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 400;
+  color: #39594d;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gw-page-title {
+  font-family: var(--font-sans);
+  font-size: 40px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: #212121;
+}
+
+.gw-card {
+  background: white;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  box-shadow: none; /* Flat design */
+}
+
+button, a {
+  transition: all 0.2s ease-in-out;
+}

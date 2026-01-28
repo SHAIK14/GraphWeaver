@@ -50,7 +50,12 @@ class ChatResponse(BaseModel):
         None,
         description="The approved user goal (if set)"
     )
-    
+
+    current_phase: str = Field(
+        default="user_intent",
+        description="Current workflow phase"
+    )
+
     status: str = Field(
         default="success",
         description="Status of the request"

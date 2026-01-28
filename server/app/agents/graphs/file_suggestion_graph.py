@@ -14,10 +14,7 @@ from app.agents.tools.file_suggestion_tools import (
     sample_file,
     set_suggested_files,
     get_suggested_files,
-    approve_suggested_files,
     ALL_AVAILABLE_FILES,
-    SUGGESTED_FILES,
-    APPROVED_FILES,
 )
 
 # Setup debug logging
@@ -75,22 +72,21 @@ def call_llm_node(state: FileSuggestionState) -> dict:
         temperature=0,
     )
 
-    # All tools for this agent
+    # Agent tools: produce data only, no approve actions
     tools = [
         get_approved_user_goal,
         list_available_files,
         sample_file,
         set_suggested_files,
         get_suggested_files,
-        approve_suggested_files,
     ]
 
-    # If files already approved, no tools needed
-    if state.get("approved_files") is not None:
-        logger.debug("[LLM NODE] Files already approved, not binding tools")
+    # If files already suggested, no tools needed (agent done)
+    if state.get("suggested_files") is not None:
+        logger.debug("[LLM NODE] Files already suggested, not binding tools")
         model_with_tools = model
     else:
-        model_with_tools = model.bind_tools(tools)
+        model_with_tools = model.bind_tools(tools, tool_choice="required")
 
     logger.debug(f"[LLM NODE] Model: {settings.openai_model_name}")
     logger.debug(f"[LLM NODE] Tools bound: {[t.name for t in tools]}")
@@ -160,7 +156,6 @@ def execute_tools_node(state: FileSuggestionState) -> dict:
             tool_result = list_available_files.invoke({})
             if tool_result.get("status") == "success":
                 files = tool_result.get(ALL_AVAILABLE_FILES, [])
-                state_updates[ALL_AVAILABLE_FILES.replace("all_available_files", "all_available_files")] = files
                 state_updates["all_available_files"] = files
                 result = f"SUCCESS: Found {len(files)} files: {files}"
             else:
@@ -193,16 +188,6 @@ def execute_tools_node(state: FileSuggestionState) -> dict:
             else:
                 result = f"SUCCESS: suggested_files = {suggested}"
             logger.debug(f"[TOOL NODE] get_suggested_files: {suggested}")
-
-        elif tool_name == "approve_suggested_files":
-            # Copy suggested to approved
-            suggested = state.get("suggested_files")
-            if suggested is None:
-                result = "ERROR: No suggested files to approve. Use set_suggested_files first."
-            else:
-                state_updates["approved_files"] = suggested
-                result = f"SUCCESS: approved_files set to {suggested}"
-            logger.debug(f"[TOOL NODE] approve_suggested_files: {suggested}")
 
         else:
             result = f"ERROR: Unknown tool {tool_name}"

@@ -359,3 +359,103 @@ def query_graph(question: str, top_k: int = 3) -> Dict[str, Any]:
         "graph_facts": graph_facts,
         "sources": [c.get("source") for c in chunks]
     })
+
+
+def query_domain_direct(question: str) -> Dict[str, Any]:
+    """
+    Fallback query when no lexical graph/vector index exists.
+
+    Queries the domain graph directly by:
+    1. Getting all node types with sample data
+    2. Getting relationship patterns
+    3. Feeding structured context to LLM for answer generation
+
+    Use this when query_graph fails due to missing Chunk nodes.
+    """
+    client = get_neo4j_client()
+    settings = get_settings()
+
+    # Get node types with sample properties
+    node_query = """
+    CALL db.labels() YIELD label
+    WHERE NOT label IN ['Chunk', 'Entity']
+    CALL (label) {
+        MATCH (n) WHERE label IN labels(n)
+        WITH n, count(n) OVER () AS total
+        WITH collect(properties(n))[0..4] AS samples, total
+        RETURN samples, total
+    }
+    RETURN label, samples, total
+    """
+    node_result = client.send_query(node_query)
+    nodes_context = node_result.get("query_result", []) if node_result.get("status") == "success" else []
+
+    # Get relationship patterns
+    rel_query = """
+    CALL db.relationshipTypes() YIELD relationshipType
+    CALL (relationshipType) {
+        MATCH (a)-[r]->(b) WHERE type(r) = relationshipType
+        RETURN labels(a)[0] AS from_label, labels(b)[0] AS to_label, count(r) AS total
+    }
+    RETURN relationshipType, from_label, to_label, total
+    """
+    rel_result = client.send_query(rel_query)
+    rels_context = rel_result.get("query_result", []) if rel_result.get("status") == "success" else []
+
+    if not nodes_context and not rels_context:
+        return tool_error("Graph appears to be empty. Nothing to query.")
+
+    # Format context for LLM
+    nodes_text = "\n".join([
+        f"- {r['label']} ({r['total']} nodes): {r.get('samples', [])}"
+        for r in nodes_context
+    ]) or "No node types found"
+
+    rels_text = "\n".join([
+        f"- (:{r['from_label']})-[:{r['relationshipType']}]->(:{r['to_label']}) — {r['total']} instances"
+        for r in rels_context
+    ]) or "No relationships found"
+
+    # Generate answer
+    llm = ChatOpenAI(
+        model=settings.openai_model_name,
+        api_key=settings.openai_api_key,
+        temperature=0.3
+    )
+
+    prompt = ChatPromptTemplate.from_template(
+        """You are a helpful assistant that answers questions about a knowledge graph.
+
+## Graph Structure
+
+### Node Types:
+{nodes}
+
+### Relationship Patterns:
+{relationships}
+
+## Question:
+{question}
+
+Instructions:
+1. Answer based on the graph structure and sample data shown above
+2. Be concise but informative
+3. If the answer requires data not shown in the samples, explain what types of data exist that could answer it
+
+Answer:"""
+    )
+
+    chain = prompt | llm
+    response = chain.invoke({
+        "nodes": nodes_text,
+        "relationships": rels_text,
+        "question": question
+    })
+
+    return tool_success("query_result", {
+        "answer": response.content,
+        "chunks_used": 0,
+        "entities_found": [],
+        "graph_facts": [],
+        "sources": ["direct_domain_query"]
+    })

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import user_intent, file_suggestion, schema_proposal, unstructured_schema, graph_construction
+from app.api.routes import user_intent, file_suggestion, schema_proposal, unstructured_schema, graph_construction, unified_chat
 from app.core.config import get_settings
 
 
@@ -32,6 +32,7 @@ app.add_middleware(
 )
 
 
+app.include_router(unified_chat.router)  # NEW: Single unified endpoint
 app.include_router(user_intent.router)
 app.include_router(file_suggestion.router)
 app.include_router(schema_proposal.router)

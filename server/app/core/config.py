@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     neo4j_username: str = Field(..., env="NEO4J_USERNAME")
     neo4j_password: str = Field(..., env="NEO4J_PASSWORD")
 
+    # Redis session storage (Upstash)
+    upstash_redis_rest_url: str = Field(..., env="UPSTASH_REDIS_REST_URL")
+    upstash_redis_rest_token: str = Field(..., env="UPSTASH_REDIS_REST_TOKEN")
+
     data_import_dir: str = Field(default="./data", env="DATA_IMPORT_DIR")
 
     class Config:

@@ -23,12 +23,11 @@ Prepare for the task:
 """
 
 WORKFLOW = """
-Think carefully, repeating these steps until finished:
+Think carefully:
 1. List available files using the 'list_available_files' tool
-2. Evaluate the relevance of each file, then record using 'set_suggested_files' tool
-3. Ask the user to approve the set of suggested files
-4. If the user has feedback, go back to step 1 with that feedback in mind
-5. If approved, use the 'approve_suggested_files' tool to record the approval
+2. For any file you're unsure about, use 'sample_file' to check its contents
+3. Evaluate relevance to the user goal, then record your suggestions using 'set_suggested_files' tool
+4. Present the suggested files to the user with a brief summary of why each is relevant
 """
 
 COMPLETE_SYSTEM_PROMPT = f"""

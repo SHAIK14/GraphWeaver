@@ -1,0 +1,11 @@
+supplier_id,supplier_name,component,lead_time_days,cost_per_unit,inventory_level,production_capacity
+S001,Apex Materials,Steel Plates,14,125.50,850,1000
+S002,TechParts Inc,Circuit Boards,7,45.00,300,500
+S003,Global Plastics,Polymer Housing,10,22.75,1200,2000
+S004,FastAssembly Co,Motors,21,340.00,150,300
+S005,Precision Tools,Bearings,5,8.25,2500,5000
+S006,QuickShip Logistics,Packaging Materials,3,1.50,5000,10000
+S007,Apex Materials,Aluminum Sheets,14,95.00,600,800
+S008,TechParts Inc,Sensors,7,67.50,450,600
+S009,EcoSupply Ltd,Recycled Materials,30,15.00,900,1500
+S010,Precision Tools,Fasteners,5,0.75,8000,15000

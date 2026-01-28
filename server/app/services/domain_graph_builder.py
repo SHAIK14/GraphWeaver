@@ -17,8 +17,12 @@ Functions:
 - construct_domain_graph: Main function that builds the complete graph
 """
 
+import csv
+from pathlib import Path
 from typing import Any, Dict, List
+
 from app.services.neo4j_client import get_neo4j_client, tool_success, tool_error
+from app.core.config import get_settings
 
 
 
@@ -72,47 +76,54 @@ def load_nodes_from_csv(
     """
     Batch loading of nodes from a CSV file into Neo4j.
 
-    How it works:
-    1. LOAD CSV reads the file from Neo4j's import directory
-    2. MERGE creates node if it doesn't exist (based on unique column)
-    3. FOREACH sets all additional properties
-    4. IN TRANSACTIONS OF 1000 ROWS batches for performance
+    Reads the CSV in Python and uses UNWIND + MERGE to import.
+    This works with any Neo4j instance (local or cloud/Aura).
 
     Args:
-        source_file: CSV filename (must be in Neo4j's import directory)
+        source_file: CSV filename relative to data_import_dir
         label: Node label to create (e.g., "Supplier")
         unique_column_name: Column used to identify unique nodes
         properties: List of additional columns to import as properties
 
     Returns:
         Dict with status and query result
-
-    Example:
-        load_nodes_from_csv(
-            "suppliers.csv",
-            "Supplier",
-            "supplier_id",
-            ["name", "city", "country"]
-        )
     """
+    settings = get_settings()
+    full_path = Path(settings.data_import_dir) / source_file
+
+    if not full_path.exists():
+        return tool_error(f"File not found: {source_file}")
+
+    # Read CSV rows in Python
+    rows = []
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                node_data = {unique_column_name: row.get(unique_column_name)}
+                for prop in properties:
+                    if prop in row:
+                        node_data[prop] = row[prop]
+                rows.append(node_data)
+    except Exception as e:
+        return tool_error(f"Error reading {source_file}: {e}")
+
+    if not rows:
+        return tool_error(f"No data rows found in {source_file}")
+
     client = get_neo4j_client()
 
-    # Build the Cypher query for batch node import
-    # Using MERGE to avoid duplicates based on unique column
+    # Build SET clause for all properties
+    set_clauses = [f"n.`{prop}` = row['{prop}']" for prop in properties]
+    set_clause = ", ".join(set_clauses) if set_clauses else "n.`_imported` = true"
+
     query = f"""
-    LOAD CSV WITH HEADERS FROM "file:///" + $source_file AS row
-    CALL (row) {{
-        MERGE (n:`{label}` {{ `{unique_column_name}`: row[$unique_column_name] }})
-        FOREACH (k IN $properties | SET n[k] = row[k])
-    }} IN TRANSACTIONS OF 1000 ROWS
+    UNWIND $rows AS row
+    MERGE (n:`{label}` {{ `{unique_column_name}`: row['{unique_column_name}'] }})
+    SET {set_clause}
     """
 
-    result = client.send_query(query, {
-        "source_file": source_file,
-        "unique_column_name": unique_column_name,
-        "properties": properties
-    })
-
+    result = client.send_query(query, {"rows": rows})
     return result
 
 
@@ -161,12 +172,8 @@ def import_relationships(relationship_construction: Dict[str, Any]) -> Dict[str,
     """
     Import relationships as defined by a relationship construction rule.
 
-    How it works:
-    1. LOAD CSV reads the source file
-    2. MATCH finds the source node (from_node)
-    3. MATCH finds the target node (to_node)
-    4. MERGE creates the relationship between them
-    5. FOREACH sets relationship properties
+    Reads the CSV in Python and uses UNWIND + MATCH + MERGE.
+    This works with any Neo4j instance (local or cloud/Aura).
 
     IMPORTANT: Nodes must exist before relationships can be created.
     That's why construct_domain_graph imports nodes first.
@@ -187,32 +194,55 @@ def import_relationships(relationship_construction: Dict[str, Any]) -> Dict[str,
     Returns:
         Dict with status and result
     """
-    client = get_neo4j_client()
+    settings = get_settings()
+    source_file = relationship_construction["source_file"]
+    full_path = Path(settings.data_import_dir) / source_file
+
+    if not full_path.exists():
+        return tool_error(f"File not found: {source_file}")
 
     from_node_column = relationship_construction["from_node_column"]
     to_node_column = relationship_construction["to_node_column"]
     from_node_label = relationship_construction["from_node_label"]
     to_node_label = relationship_construction["to_node_label"]
     relationship_type = relationship_construction["relationship_type"]
+    rel_properties = relationship_construction.get("properties", [])
 
-    # Build the Cypher query for relationship import
+    # Read CSV rows in Python
+    rows = []
+    try:
+        with open(full_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                row_data = {
+                    from_node_column: row.get(from_node_column),
+                    to_node_column: row.get(to_node_column),
+                }
+                for prop in rel_properties:
+                    if prop in row:
+                        row_data[prop] = row[prop]
+                rows.append(row_data)
+    except Exception as e:
+        return tool_error(f"Error reading {source_file}: {e}")
+
+    if not rows:
+        return tool_error(f"No data rows found in {source_file}")
+
+    client = get_neo4j_client()
+
+    # Build SET clause for relationship properties
+    set_clauses = [f"r.`{prop}` = row['{prop}']" for prop in rel_properties]
+    set_clause = f"SET {', '.join(set_clauses)}" if set_clauses else ""
+
     query = f"""
-    LOAD CSV WITH HEADERS FROM "file:///" + $source_file AS row
-    CALL (row) {{
-        MATCH (from_node:`{from_node_label}` {{ `{from_node_column}`: row[$from_node_column] }})
-        MATCH (to_node:`{to_node_label}` {{ `{to_node_column}`: row[$to_node_column] }})
-        MERGE (from_node)-[r:`{relationship_type}`]->(to_node)
-        FOREACH (k IN $properties | SET r[k] = row[k])
-    }} IN TRANSACTIONS OF 1000 ROWS
+    UNWIND $rows AS row
+    MATCH (from_node:`{from_node_label}` {{ `{from_node_column}`: row['{from_node_column}'] }})
+    MATCH (to_node:`{to_node_label}` {{ `{to_node_column}`: row['{to_node_column}'] }})
+    MERGE (from_node)-[r:`{relationship_type}`]->(to_node)
+    {set_clause}
     """
 
-    result = client.send_query(query, {
-        "source_file": relationship_construction["source_file"],
-        "from_node_column": from_node_column,
-        "to_node_column": to_node_column,
-        "properties": relationship_construction.get("properties", [])
-    })
-
+    result = client.send_query(query, {"rows": rows})
     return result
 
 

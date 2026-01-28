@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 from app.agents.graphs.schema_proposal_graph import schema_proposal_graph
+from app.core.session_manager import get_session, save_session
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -22,19 +23,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/schema-proposal", tags=["schema-proposal"])
 
 
-
-
 class SchemaProposalRequest(BaseModel):
     """Request to send a message to the schema proposal agent."""
     message: str = Field(..., min_length=1, description="User's message")
     session_id: str = Field(..., description="Unique session identifier")
     # Input from previous agents (required on first message)
-    approved_user_goal: Optional[Dict[str, Any]] = Field(
-        None, description="User goal from Intent Agent"
-    )
-    approved_files: Optional[List[str]] = Field(
-        None, description="Approved files from File Suggestion Agent"
-    )
+    # No longer needed - will load from Redis
+    # approved_user_goal: Optional[Dict[str, Any]] = Field(
+    #     None, description="User goal from Intent Agent"
+    # )
+    # approved_files: Optional[List[str]] = Field(
+    #     None, description="Approved files from File Suggestion Agent"
+    # )
 
 
 class SchemaProposalResponse(BaseModel):
@@ -50,6 +50,7 @@ class SchemaProposalResponse(BaseModel):
     # Pass-through from previous agents
     approved_user_goal: Optional[Dict[str, Any]] = None
     approved_files: Optional[List[str]] = None
+    current_phase: str = "schema_proposal"
     status: str = "success"
 
 
@@ -65,39 +66,30 @@ class SessionStateResponse(BaseModel):
 
 
 # =============================================================================
-# SESSION MANAGEMENT (In-memory for development)
+# SESSION MANAGEMENT (Redis)
 # =============================================================================
 
-# In production, replace with Redis or database
-sessions: Dict[str, Dict[str, Any]] = {}
+def get_or_create_session_state(session_id: str) -> Dict[str, Any]:
+    """Get existing session from Redis or create a new one."""
+    # Load from Redis
+    session_state = get_session(session_id)
 
-
-def get_or_create_session(
-    session_id: str,
-    approved_user_goal: Optional[Dict[str, Any]] = None,
-    approved_files: Optional[List[str]] = None
-) -> Dict[str, Any]:
-    """Get existing session or create a new one."""
-    if session_id not in sessions:
+    if not session_state:
         logger.info(f"Creating new session: {session_id}")
-        sessions[session_id] = {
+        session_state = {
             "messages": [],
-            "approved_user_goal": approved_user_goal,
-            "approved_files": approved_files,
+            "approved_user_goal": None,
+            "approved_files": None,
             "proposed_construction_plan": None,
             "approved_construction_plan": None,
             "feedback": "",
             "current_agent": "proposal",
+            "current_phase": "schema_proposal",
             "iteration_count": 0
         }
-    else:
-        # Update with any new input data
-        if approved_user_goal:
-            sessions[session_id]["approved_user_goal"] = approved_user_goal
-        if approved_files:
-            sessions[session_id]["approved_files"] = approved_files
+        save_session(session_id, session_state)
 
-    return sessions[session_id]
+    return session_state
 
 
 # =============================================================================
@@ -121,14 +113,13 @@ async def chat(request: SchemaProposalRequest):
     logger.debug(f"Message: {request.message}")
 
     try:
-        # Get or create session with input from previous agents
-        session = get_or_create_session(
-            request.session_id,
-            request.approved_user_goal,
-            request.approved_files
-        )
+        # Load session from Redis
+        session = get_or_create_session_state(request.session_id)
 
-        # Validate we have required inputs
+        logger.info(f"[schema_proposal] Session {request.session_id} - User goal: {session.get('approved_user_goal')}")
+        logger.info(f"[schema_proposal] Session {request.session_id} - Files: {session.get('approved_files')}")
+
+        # Validate we have required inputs (should come from previous agents via Redis)
         if not session.get("approved_user_goal"):
             raise HTTPException(
                 status_code=400,
@@ -143,29 +134,14 @@ async def chat(request: SchemaProposalRequest):
         # Add user message to session
         session["messages"].append(HumanMessage(content=request.message))
 
-        # Prepare state for graph
-        graph_state = {
-            "messages": session["messages"],
-            "approved_user_goal": session["approved_user_goal"],
-            "approved_files": session["approved_files"],
-            "proposed_construction_plan": session.get("proposed_construction_plan"),
-            "approved_construction_plan": session.get("approved_construction_plan"),
-            "feedback": session.get("feedback", ""),
-            "current_agent": session.get("current_agent", "proposal"),
-            "iteration_count": session.get("iteration_count", 0)
-        }
-
         # Invoke the graph
         logger.debug("Invoking schema proposal graph")
-        result = schema_proposal_graph.invoke(graph_state)
+        result = schema_proposal_graph.invoke(session)
 
-        # Update session with results
-        session["messages"] = list(result["messages"])
-        session["proposed_construction_plan"] = result.get("proposed_construction_plan")
-        session["approved_construction_plan"] = result.get("approved_construction_plan")
-        session["feedback"] = result.get("feedback", "")
-        session["current_agent"] = result.get("current_agent", "")
-        session["iteration_count"] = result.get("iteration_count", 0)
+        # Save updated session to Redis
+        save_session(request.session_id, result)
+
+        logger.info(f"[schema_proposal] Session {request.session_id} - Approved plan: {result.get('approved_construction_plan') is not None}")
 
         # Extract last AI message for response
         last_ai_message = ""
@@ -176,16 +152,22 @@ async def chat(request: SchemaProposalRequest):
 
         logger.debug(f"Response: {last_ai_message[:100]}...")
 
+        # Determine next phase
+        current_phase = "schema_proposal"
+        if result.get("approved_construction_plan"):
+            current_phase = "graph_construction"
+
         return SchemaProposalResponse(
             message=last_ai_message,
             session_id=request.session_id,
-            proposed_construction_plan=session["proposed_construction_plan"],
-            approved_construction_plan=session["approved_construction_plan"],
-            feedback=session["feedback"],
-            iteration_count=session["iteration_count"],
-            current_agent=session["current_agent"],
-            approved_user_goal=session["approved_user_goal"],
-            approved_files=session["approved_files"],
+            proposed_construction_plan=result.get("proposed_construction_plan"),
+            approved_construction_plan=result.get("approved_construction_plan"),
+            feedback=result.get("feedback", ""),
+            iteration_count=result.get("iteration_count", 0),
+            current_agent=result.get("current_agent", ""),
+            approved_user_goal=result.get("approved_user_goal"),
+            approved_files=result.get("approved_files"),
+            current_phase=current_phase,
             status="success"
         )
 
@@ -197,15 +179,17 @@ async def chat(request: SchemaProposalRequest):
 
 
 @router.get("/session/{session_id}", response_model=SessionStateResponse)
-async def get_session(session_id: str):
+async def get_session_endpoint(session_id: str):
     """Get the current state of a session."""
-    if session_id not in sessions:
+    # Load from Redis
+    session = get_session(session_id)
+
+    if not session:
         return SessionStateResponse(
             session_id=session_id,
             exists=False
         )
 
-    session = sessions[session_id]
     return SessionStateResponse(
         session_id=session_id,
         exists=True,
@@ -218,12 +202,17 @@ async def get_session(session_id: str):
 
 
 @router.delete("/session/{session_id}")
-async def delete_session(session_id: str):
+async def delete_session_endpoint(session_id: str):
     """Clear a session."""
-    if session_id not in sessions:
+    from app.core.session_manager import delete_session
+
+    # Load from Redis
+    session = get_session(session_id)
+    if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    del sessions[session_id]
+    # Delete from Redis
+    delete_session(session_id)
     logger.info(f"Deleted session: {session_id}")
 
     return {"message": f"Session {session_id} deleted", "status": "success"}
@@ -236,10 +225,10 @@ async def approve_construction_plan(session_id: str):
 
     Call this after reviewing the plan and deciding it's ready.
     """
-    if session_id not in sessions:
+    # Load from Redis
+    session = get_session(session_id)
+    if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    session = sessions[session_id]
 
     if not session.get("proposed_construction_plan"):
         raise HTTPException(
@@ -249,6 +238,10 @@ async def approve_construction_plan(session_id: str):
 
     # Copy proposed to approved
     session["approved_construction_plan"] = session["proposed_construction_plan"]
+
+    # Save back to Redis
+    save_session(session_id, session)
+
     logger.info(f"Approved construction plan for session: {session_id}")
 
     return {

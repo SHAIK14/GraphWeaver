@@ -1,21 +1,22 @@
+import logging
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 from langchain_core.messages import HumanMessage
 
 from app.agents.graphs.file_suggestion_graph import file_suggestion_graph
+from app.core.session_manager import get_session, save_session
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/file-suggestion", tags=["file-suggestion"])
-
-# In-memory session storage (use Redis in production)
-sessions: Dict[str, dict] = {}
 
 
 class ChatRequest(BaseModel):
     message: str
     session_id: str
-    # Optional: pass approved_user_goal from previous agent
-    approved_user_goal: Optional[dict] = None
+    # No longer needed - will load from Redis
+    # approved_user_goal: Optional[dict] = None
 
 
 class ChatResponse(BaseModel):
@@ -25,6 +26,7 @@ class ChatResponse(BaseModel):
     all_available_files: Optional[List[str]] = None
     suggested_files: Optional[List[str]] = None
     approved_files: Optional[List[str]] = None
+    current_phase: str = "file_suggestion"
     status: str
 
 
@@ -32,28 +34,32 @@ class ChatResponse(BaseModel):
 async def chat(request: ChatRequest):
     session_id = request.session_id
 
-    # Get or create session state
-    if session_id not in sessions:
-        sessions[session_id] = {
+    # Load session from Redis (includes approved_user_goal from previous agent!)
+    state = get_session(session_id)
+
+    # Initialize if new session
+    if not state:
+        state = {
             "messages": [],
-            "approved_user_goal": request.approved_user_goal,  # From previous agent
+            "approved_user_goal": None,
             "all_available_files": None,
             "suggested_files": None,
             "approved_files": None,
+            "current_phase": "file_suggestion"
         }
-    
-    # If approved_user_goal passed in request, update it
-    if request.approved_user_goal:
-        sessions[session_id]["approved_user_goal"] = request.approved_user_goal
 
-    state = sessions[session_id]
+    logger.info(f"[file_suggestion] Session {session_id} - User goal: {state.get('approved_user_goal')}")
+
+    # Add user message
     state["messages"].append(HumanMessage(content=request.message))
 
     # Invoke the graph
     result = file_suggestion_graph.invoke(state)
 
-    # Update session
-    sessions[session_id] = result
+    # Save updated session to Redis
+    save_session(session_id, result)
+
+    logger.info(f"[file_suggestion] Session {session_id} - Approved files: {result.get('approved_files')}")
 
     # Extract last AI message
     last_message = ""
@@ -62,6 +68,11 @@ async def chat(request: ChatRequest):
             last_message = msg.content
             break
 
+    # Determine next phase
+    current_phase = "file_suggestion"
+    if result.get("approved_files"):
+        current_phase = "schema_proposal"  # or file_type_detection
+
     return ChatResponse(
         message=last_message,
         session_id=session_id,
@@ -69,5 +80,6 @@ async def chat(request: ChatRequest):
         all_available_files=result.get("all_available_files"),
         suggested_files=result.get("suggested_files"),
         approved_files=result.get("approved_files"),
+        current_phase=current_phase,
         status="success",
     )
