@@ -1,6 +1,0 @@
-supplier_id,name,location,reliability_score,established_year
-SUP001,Acme Components,Shanghai,0.92,1998
-SUP002,Global Parts Inc,Detroit,0.88,1985
-SUP003,TechSource Ltd,Shenzhen,0.95,2005
-SUP004,EuroSupply GmbH,Munich,0.91,1972
-SUP005,Pacific Materials,Tokyo,0.89,1990

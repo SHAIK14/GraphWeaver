@@ -1,6 +1,31 @@
 # Claude Code settings and documentation
 .claude/
 
+# Environment variables - NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
 # OS files
 .DS_Store
 Thumbs.db
+
+# Old server (renamed, don't commit)
+server_old/
+
+# Sessions (if added)
+sessions/
+
+# Logs
+*.log

@@ -1,13 +1,37 @@
-fastapi
-uvicorn
-pydantic
-pydantic-settings
-langchain
-langchain-core
-langchain-openai
-langgraph
-openai
-neo4j
-neo4j-graphrag
-python-dotenv
-upstash-redis
+# Web Framework
+fastapi==0.115.0        # Modern async web framework
+uvicorn[standard]==0.32.0  # ASGI server for FastAPI
+pydantic==2.9.2         # Data validation & settings
+pydantic-settings==2.6.0   # Environment variable management
+
+# Auth
+supabase==2.9.0         # Supabase client (auth + postgres)
+python-jose[cryptography]==3.3.0  # JWT token handling
+passlib[bcrypt]==1.7.4  # Password hashing
+
+# Agents & LLM
+langchain==0.3.7        # LLM framework
+langchain-openai==0.2.8 # OpenAI integration
+langchain-community==0.3.7  # Community integrations
+langgraph==0.2.45       # Agentic workflows
+openai==1.54.4          # OpenAI API client
+
+# Databases
+neo4j==5.26.0           # Neo4j graph database driver
+upstash-redis==0.15.0           # Redis client
+asyncpg==0.30.0         # Async PostgreSQL driver (for Supabase)
+
+# Vector Operations
+numpy==1.26.4           # Numerical operations
+pgvector==0.3.6         # PostgreSQL vector extension support
+
+# Utilities
+python-dotenv==1.0.1    # Load .env files
+aiofiles==24.1.0        # Async file operations
+httpx==0.27.2           # Async HTTP client
+
+# Development
+pytest==8.3.3           # Testing framework
+pytest-asyncio==0.24.0  # Async test support
+black==24.10.0          # Code formatter
+ruff==0.7.4             # Fast linter
