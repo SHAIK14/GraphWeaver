@@ -13,11 +13,11 @@ export default function ProgressSidebar({ currentPhase, sessionState }) {
   const [collapsed, setCollapsed] = useState(false);
 
   const phases = [
-    { key: 'user_intent', label: 'Define Goal' },
-    { key: 'file_suggestion', label: 'Select Files' },
-    { key: 'schema_proposal', label: 'Approve Schema' },
-    { key: 'unstructured_schema', label: 'Extract Entities' },
-    { key: 'graph_construction', label: 'Build Graph' },
+    { key: 'intent', label: 'Define Goal' },
+    { key: 'files', label: 'Select Files' },
+    { key: 'schema', label: 'Approve Schema' },
+    { key: 'build', label: 'Build Graph' },
+    { key: 'query', label: 'Query Graph' },
   ];
 
   const currentStepIndex = phases.findIndex(p => p.key === currentPhase);

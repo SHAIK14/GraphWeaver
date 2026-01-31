@@ -16,7 +16,7 @@ import CheckpointCard from '@/components/chat/CheckpointCard';
 export default function ChatPage() {
   // Session & Phase Management
   const [sessionId] = useState(() => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
-  const [currentPhase, setCurrentPhase] = useState('user_intent');
+  const [currentPhase, setCurrentPhase] = useState('intent');
   const [mode, setMode] = useState('build'); // 'build' or 'query'
 
   // Chat State
