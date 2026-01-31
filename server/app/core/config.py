@@ -19,13 +19,15 @@ class Settings(BaseSettings):
     openai_model_name: str = Field(...)  
     
     # Supabase
-    supabase_url: str = Field(...)  
-    supabase_key: str = Field(...) 
-    supabase_service_key: str = Field(...)  
+    supabase_url: str = Field(...)
+    supabase_key: str = Field(...)
+    supabase_service_key: str = Field(...)
+    supabase_jwt_secret: str = Field(...)  # JWT secret for verifying tokens
     
     # Upstash Redis
     upstash_redis_rest_url: str = Field(...)
     upstash_redis_rest_token: str = Field(...)
+    session_ttl_hours: int = Field(default=24)
     
     # Neo4j
     neo4j_uri: str = Field(...)

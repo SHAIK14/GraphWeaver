@@ -24,6 +24,16 @@ export const PHASE_METADATA = {
   completed: { label: 'Complete', step: 6 },
 };
 
+/** Short "what to do now" per phase (for chat header) */
+export const PHASE_HINT = {
+  user_intent: 'Describe the kind of graph you want to build.',
+  file_suggestion: 'Confirm or adjust which files to use.',
+  schema_proposal: 'Review and approve the proposed schema.',
+  unstructured_schema: 'Review entities and facts, then approve.',
+  graph_construction: 'Building your graph.',
+  completed: 'Your graph is ready.',
+};
+
 // =============================================================================
 // CHAT MESSAGES
 // =============================================================================

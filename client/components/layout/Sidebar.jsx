@@ -4,9 +4,11 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Logo from './Logo';
+import { useAuth } from '@/lib/AuthContext';
 
 const Sidebar = () => {
   const pathname = usePathname();
+  const { signOut } = useAuth();
 
   const navGroups = [
     {
@@ -24,11 +26,20 @@ const Sidebar = () => {
     }
   ];
 
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      // AuthContext handles redirect to /login
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
   return (
     <aside className="w-[240px] h-screen bg-[#fafafa] border-r border-[#e0e0e0] flex flex-col pt-12 fixed left-0 top-0 z-50">
       <div className="mb-12 px-8 flex items-center gap-3">
         <Logo className="w-8 h-8" />
-        <span className="text-[14px] font-bold tracking-tighter uppercase text-zinc-900 font-mono">Graphweaver</span>
+        <span className="text-[14px] font-bold tracking-tighter uppercase text-zinc-900 font-mono">GraphWeaver</span>
       </div>
 
       <nav className="flex-1 overflow-y-auto">
@@ -60,17 +71,20 @@ const Sidebar = () => {
           </div>
         ))}
       </nav>
-      
-      <div className="p-8 border-t border-zinc-100 bg-[#fafafa]">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-zinc-200 flex items-center justify-center text-[10px] font-bold text-zinc-600 border border-zinc-300">
-            AS
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[13px] font-bold text-zinc-900">Shaik Asif</span>
-            <span className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Pro Edition</span>
-          </div>
-        </div>
+
+      <div className="p-6 border-t border-[#e0e0e0]/60 space-y-3">
+        <Link href="/" className="flex items-center gap-2 text-[12px] font-medium text-zinc-500 hover:text-[#212121] transition-colors">
+          <span>Back to home</span>
+        </Link>
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-2 text-[12px] font-medium text-zinc-500 hover:text-[#ff7759] transition-colors"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          <span>Log out</span>
+        </button>
       </div>
     </aside>
   );
