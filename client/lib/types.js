@@ -141,12 +141,6 @@ export const PHASE_HINT = {
  * @property {boolean} vector_index - Vector index created
  */
 
-/**
- * @typedef {Object} GraphStats
- * @property {Object[]} nodes - Node counts by label
- * @property {Object[]} relationships - Relationship counts by type
- */
-
 // =============================================================================
 // GRAPHRAG QUERY
 // =============================================================================

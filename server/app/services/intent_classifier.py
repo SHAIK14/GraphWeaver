@@ -1,7 +1,10 @@
+import logging
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage,HumanMessage
 from app.core.config import settings
 from app.core.enums import FlowType
+
+logger = logging.getLogger(__name__)
 
 
 model = ChatOpenAI(
@@ -69,7 +72,9 @@ Respond with ONLY one word: BUILD, QUERY, or EXTEND"""
         "QUERY": FlowType.QUERY,
         "EXTEND": FlowType.EXTEND,
     }
-    return flow_map.get(classification, FlowType.BUILD)
+    mapped = flow_map.get(classification, FlowType.BUILD)
+    logger.info(f"[INTENT_CLASSIFIER] Input: \"{message}\" → Raw LLM: \"{response.content.strip()}\" → Mapped: {mapped.value}" + (f" (fallback from \"{classification}\")" if classification not in flow_map else ""))
+    return mapped
     
 
   

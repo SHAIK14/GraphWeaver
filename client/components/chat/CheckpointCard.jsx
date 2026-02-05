@@ -1,6 +1,110 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
+
+/**
+ * Collapsible Schema Details Component
+ * Shows summary with expand/collapse for full details
+ */
+function SchemaDetailsCollapsible({ nodes, relationships }) {
+  const [showNodes, setShowNodes] = useState(false);
+  const [showRels, setShowRels] = useState(false);
+
+  return (
+    <div className="space-y-3">
+      {/* Summary - always visible */}
+      <div className="flex items-center gap-3 text-[14px] font-medium text-zinc-800">
+        <span className="text-[#39594d]">📊</span>
+        <span>
+          <strong className="text-black">{nodes.length}</strong> main things · <strong className="text-black">{relationships.length}</strong> connections
+        </span>
+      </div>
+
+      {/* Nodes - collapsible */}
+      {nodes.length > 0 && (
+        <div className="border border-[#e0e0e0] rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowNodes(!showNodes)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-[#fafafa] hover:bg-zinc-100 transition-colors text-left"
+          >
+            <span className="text-[13px] font-semibold text-zinc-800 flex items-center gap-2">
+              <span className="text-[#39594d] text-[10px]">{showNodes ? '▼' : '▶'}</span>
+              Main Things ({nodes.length})
+            </span>
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
+              {showNodes ? 'Hide' : 'Show details'}
+            </span>
+          </button>
+          {showNodes && (
+            <div className="px-4 py-3 bg-white">
+              <ul className="space-y-2 text-[13px] text-zinc-700">
+                {nodes.map((n, i) => {
+                  const label = typeof n === 'string' ? n : (n.label || n.name);
+                  const desc = typeof n === 'object' && n.description ? n.description : null;
+                  const props = typeof n === 'object' && n.properties ? n.properties : null;
+
+                  return (
+                    <li key={i} className="border-l-2 border-[#39594d] pl-3 py-1">
+                      <div className="font-bold text-black">{label}</div>
+                      {desc && <div className="text-[12px] text-zinc-600 mt-0.5">{desc}</div>}
+                      {props && props.length > 0 && (
+                        <div className="text-[11px] text-zinc-500 mt-1">
+                          Properties: {props.map(p => typeof p === 'string' ? p : p.name).join(', ')}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Relationships - collapsible */}
+      {relationships.length > 0 && (
+        <div className="border border-[#e0e0e0] rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowRels(!showRels)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-[#fafafa] hover:bg-zinc-100 transition-colors text-left"
+          >
+            <span className="text-[13px] font-semibold text-zinc-800 flex items-center gap-2">
+              <span className="text-[#39594d] text-[10px]">{showRels ? '▼' : '▶'}</span>
+              Connections ({relationships.length})
+            </span>
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
+              {showRels ? 'Hide' : 'Show details'}
+            </span>
+          </button>
+          {showRels && (
+            <div className="px-4 py-3 bg-white">
+              <ul className="space-y-2 text-[13px] text-zinc-700">
+                {relationships.map((r, i) => {
+                  const type = typeof r === 'string' ? r : (r.type || r.name);
+                  const from = typeof r === 'object' && r.from ? r.from : null;
+                  const to = typeof r === 'object' && r.to ? r.to : null;
+                  const desc = typeof r === 'object' && r.description ? r.description : null;
+
+                  return (
+                    <li key={i} className="border-l-2 border-[#ff7759] pl-3 py-1">
+                      <div className="font-bold text-black">
+                        {type}
+                        {from && to && <span className="font-normal text-zinc-600 ml-2">({from} → {to})</span>}
+                      </div>
+                      {desc && <div className="text-[12px] text-zinc-600 mt-0.5">{desc}</div>}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Renders proposed_data in a structured way (not raw JSON).
@@ -28,32 +132,7 @@ function ProposedDataDisplay({ checkpoint, data }) {
   const nodes = data.nodes || data.proposed_schema?.nodes || [];
   const rels = data.relationships || data.proposed_schema?.relationships || [];
   if (nodes.length > 0 || rels.length > 0) {
-    return (
-      <div className="space-y-3 text-[13px] text-zinc-700">
-        {nodes.length > 0 && (
-          <div>
-            <p className="text-[11px] font-mono uppercase tracking-wider text-zinc-500 mb-1">Nodes</p>
-            <ul className="space-y-1">
-              {nodes.slice(0, 12).map((n, i) => (
-                <li key={i}>{typeof n === 'string' ? n : (n.label || n.name || JSON.stringify(n))}</li>
-              ))}
-              {nodes.length > 12 && <li className="text-zinc-500">+{nodes.length - 12} more</li>}
-            </ul>
-          </div>
-        )}
-        {rels.length > 0 && (
-          <div>
-            <p className="text-[11px] font-mono uppercase tracking-wider text-zinc-500 mb-1">Relationships</p>
-            <ul className="space-y-1">
-              {rels.slice(0, 8).map((r, i) => (
-                <li key={i}>{typeof r === 'string' ? r : (r.type || r.name || JSON.stringify(r))}</li>
-              ))}
-              {rels.length > 8 && <li className="text-zinc-500">+{rels.length - 8} more</li>}
-            </ul>
-          </div>
-        )}
-      </div>
-    );
+    return <SchemaDetailsCollapsible nodes={nodes} relationships={rels} />;
   }
 
   // Goal / description
@@ -86,11 +165,11 @@ function ProposedDataDisplay({ checkpoint, data }) {
 }
 
 const CHECKPOINT_LABELS = {
-  goal_approval: 'Approve goal',
-  files_approval: 'Approve files',
-  schema_approval: 'Approve schema',
-  build_approval: 'Build graph',
-  build_confirmation: 'Confirm build',
+  goal_approval: 'Looks good?',
+  files_approval: 'Use these files?',
+  schema_approval: 'Ready to build?',
+  build_approval: 'Build it',
+  build_confirmation: 'Confirm',
 };
 
 export default function CheckpointCard({ checkpoint, proposedData, actions, onAction }) {

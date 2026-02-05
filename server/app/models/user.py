@@ -7,9 +7,10 @@ class User(BaseModel):
     id : str
     email : EmailStr
     created_at : Optional[datetime] = None
-    
+
     email_confirmed_at : Optional[datetime] = None
     last_sign_in_at : Optional[datetime] = None
+    token : Optional[str] = None
 
 class TokenPayload(BaseModel):
     sub : str

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { sendStreamingMessage, queryGraph } from '@/lib/api';
+import { sendStreamingMessage, removeFile } from '@/lib/api';
 import { PHASE_METADATA, PHASE_HINT } from '@/lib/types';
 import MessageBubble from '@/components/chat/MessageBubble';
 import ChatInput from '@/components/chat/ChatInput';
@@ -32,12 +32,16 @@ export default function ChatPage() {
   // UI State
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [thinkingStatus, setThinkingStatus] = useState('');
 
   // Session State (accumulated from agents)
   const [sessionState, setSessionState] = useState({});
 
   // Checkpoint State
   const [checkpointData, setCheckpointData] = useState(null);
+
+  // Uploaded Files (for current session only)
+  const [uploadedFiles, setUploadedFiles] = useState([]);
 
   const messagesEndRef = useRef(null);
   const lastSendRef = useRef({ message: null, action: null });
@@ -71,8 +75,10 @@ export default function ChatPage() {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    setUploadedFiles([]); // Clear files after send (like ChatGPT)
     setIsLoading(true);
     setError(null);
+    setThinkingStatus(''); // Clear previous thinking status
     lastSendRef.current = { message: messageText, action };
 
     try {
@@ -80,17 +86,12 @@ export default function ChatPage() {
         // BUILD MODE: Use streaming endpoint
         const agentMessageId = `agent-${Date.now()}`;
         let currentContent = '';
-        let thinkingStatus = '';
 
         await sendStreamingMessage(sessionId, messageText, {
           // Called when agent is thinking/processing
           onThinking: (status) => {
             console.log('[Chat] Thinking:', status);
-            thinkingStatus = status;
-            // TODO: You can update UI here to show status like:
-            // - "Analyzing files..."
-            // - "Designing schema..."
-            // For now, we just log it
+            setThinkingStatus(status);
           },
 
           // Called for each token (word) of the response
@@ -136,9 +137,14 @@ export default function ChatPage() {
             // Handle checkpoint
             if (response.checkpoint) {
               setCheckpointData({
-                checkpoint: response.checkpoint,
-                proposedData: response.proposed_data,
-                actions: response.actions,
+                checkpoint: response.checkpoint.type?.toLowerCase() || 'schema_approval',
+                proposedData: response.checkpoint.data,
+                prompt: response.checkpoint.prompt,
+                actions: {
+                  approve: 'Approve',
+                  modify: 'Revise',
+                  cancel: 'Cancel'
+                },
               });
             } else {
               setCheckpointData(null);
@@ -150,6 +156,7 @@ export default function ChatPage() {
               setCurrentPhase(response.phase);
             }
 
+            setThinkingStatus(''); // Clear thinking status
             setIsLoading(false);
           },
 
@@ -165,24 +172,11 @@ export default function ChatPage() {
               timestamp: Date.now(),
             };
             setMessages(prev => [...prev, errorMessage]);
+            setThinkingStatus(''); // Clear thinking status
             setIsLoading(false);
           }
         });
 
-      } else {
-        // QUERY MODE: Use GraphRAG (non-streaming for now)
-        const result = await queryGraph(messageText, 3);
-
-        const queryMessage = {
-          id: `agent-${Date.now()}`,
-          role: 'agent',
-          content: result.query_result.answer,
-          timestamp: Date.now(),
-          metadata: result.query_result,
-        };
-
-        setMessages(prev => [...prev, queryMessage]);
-        setIsLoading(false);
       }
 
     } catch (err) {
@@ -196,6 +190,7 @@ export default function ChatPage() {
         timestamp: Date.now(),
       };
       setMessages(prev => [...prev, errorMessage]);
+      setThinkingStatus(''); // Clear thinking status
       setIsLoading(false);
     }
   };
@@ -287,8 +282,12 @@ export default function ChatPage() {
                   <span className="w-2 h-2 bg-[#39594d] rounded-full animate-bounce [animation-delay:300ms]" style={{ animationDuration: '0.6s' }} />
                 </div>
                 <div>
-                  <p className="text-[14px] font-medium text-zinc-700">Thinking...</p>
-                  <p className="text-[12px] text-zinc-500 mt-0.5">{PHASE_HINT[currentPhase] ?? 'Processing your message.'}</p>
+                  <p className="text-[14px] font-medium text-zinc-700">
+                    {thinkingStatus || 'Thinking...'}
+                  </p>
+                  {!thinkingStatus && (
+                    <p className="text-[12px] text-zinc-500 mt-0.5">{PHASE_HINT[currentPhase] ?? 'Processing your message.'}</p>
+                  )}
                 </div>
               </div>
             )}
@@ -307,11 +306,25 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Input Bar */}
+        {/* Input Bar with integrated file upload */}
         <ChatInput
           onSend={(text) => handleSend(text)}
           isLoading={isLoading}
           disabled={checkpointData !== null}
+          sessionId={sessionId}
+          mode={mode}
+          uploadedFiles={uploadedFiles}
+          onFileUpload={(result) => {
+            console.log('[Chat] File uploaded:', result);
+            // Add to uploaded files list
+            setUploadedFiles(prev => [...prev, result]);
+          }}
+          onRemoveFile={(fileName) => {
+            setUploadedFiles(prev => prev.filter(f => f.name !== fileName));
+            removeFile(sessionId, fileName).catch(err =>
+              console.error('[Chat] Failed to remove file from session:', err)
+            );
+          }}
         />
       </div>
 

@@ -35,7 +35,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             email=response.user.email,
             created_at=response.user.created_at,
             email_confirmed_at=response.user.email_confirmed_at,
-            last_sign_in_at=response.user.last_sign_in_at
+            last_sign_in_at=response.user.last_sign_in_at,
+            token=token
         )
 
         logger.info(f"[AUTH] ========== Authentication Success: {user.email} ==========")

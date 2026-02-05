@@ -39,6 +39,7 @@ async def chat_endpoint(
             session_id=session_id,
             user_id=user.id,
             message=request.message,
+            token=user.token,
         ),
         media_type="text/event-stream",
         headers={
